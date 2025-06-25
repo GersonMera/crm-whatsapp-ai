@@ -30,9 +30,9 @@ else
     exit 1
 fi
 
-# Instalación de PM2
+# Instalación de PM2 (corregido)
 echo -e "${GREEN}Instalando PM2 para gestión de procesos...${NC}"
-sudo npm install -y pm2 -g
+sudo npm install -g pm2
 
 # Configuración de la base de datos
 echo -e "${GREEN}Configurando base de datos PostgreSQL...${NC}"
@@ -40,23 +40,23 @@ echo -e "${GREEN}Introduce el nombre de usuario para PostgreSQL:${NC}"
 read DB_USER
 echo -e "${GREEN}Introduce la contraseña para PostgreSQL:${NC}"
 read -s DB_PASSWORD
-echo -e "${GREEN}Introduce el nombre de la base de datos:${NC}"
+echo -e "${GREEN}\nIntroduce el nombre de la base de datos:${NC}"
 read DB_NAME
 
-# Crear usuario y base de datos
-sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
-sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+# Crear usuario y base de datos (sin comprobaciones, puede fallar si ya existen)
+sudo -u postgres psql -c "CREATE USER \"$DB_USER\" WITH PASSWORD '$DB_PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
 
-# Crear archivo .env para backend
+# Crear archivo .env para backend (variables con comillas)
 echo -e "${GREEN}Creando archivo .env para configuración...${NC}"
 cat > .env << EOF
 # Database
-DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME
-PGDATABASE=$DB_NAME
-PGHOST=localhost
-PGUSER=$DB_USER
-PGPASSWORD=$DB_PASSWORD
-PGPORT=5432
+DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME"
+PGDATABASE="$DB_NAME"
+PGHOST="localhost"
+PGUSER="$DB_USER"
+PGPASSWORD="$DB_PASSWORD"
+PGPORT="5432"
 
 # API Keys
 OPENAI_API_KEY=tu_clave_openai
@@ -136,15 +136,15 @@ sudo mkdir -p /etc/nginx/ssl
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt -subj "/CN=$DOMAIN"
 
 # Habilitar sitio y reiniciar Nginx
-sudo ln -s /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
 sudo systemctl restart nginx
 
-# Script de inicio
+# Script de inicio (corrigiendo pm2 para ts-node)
 echo -e "${GREEN}Creando script de inicio...${NC}"
 cat > start.sh << EOF
 #!/bin/bash
 cd backend
-pm2 start server/index.ts --name crm-backend -- NODE_ENV=production
+pm2 start ts-node -- server/index.ts --name crm-backend -- NODE_ENV=production
 echo "CRM iniciado con PM2. Usa 'pm2 logs' para ver los logs."
 EOF
 
@@ -154,7 +154,7 @@ chmod +x start.sh
 echo -e "${GREEN}¿Deseas configurar SSL con Let's Encrypt? (y/n)${NC}"
 read SSL_CHOICE
 
-if [ "$SSL_CHOICE" = "y" ]; then
+if [ "\$SSL_CHOICE" = "y" ]; then
     echo -e "${GREEN}Instalando Certbot...${NC}"
     sudo apt install -y certbot python3-certbot-nginx
     
@@ -184,8 +184,11 @@ EOF
 chmod +x backup.sh
 sudo mv backup.sh /usr/local/bin/
 
-# Configurar respaldo diario con cron
-echo "0 2 * * * /usr/local/bin/backup.sh" | sudo tee -a /var/spool/cron/crontabs/root > /dev/null
+# Configurar respaldo diario con cron (mejor forma)
+sudo crontab -l > mycron || true
+echo "0 2 * * * /usr/local/bin/backup.sh" >> mycron
+sudo crontab mycron
+rm mycron
 
 echo -e "${GREEN}¡Instalación completa!${NC}"
 echo -e "${GREEN}Recomendaciones finales:${NC}"
